@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="theme-color" content="#0b1220" />
+  <meta name="color-scheme" content="dark light" />
+  <meta name="description" content="Offline, browser-native voice cloning and text-to-speech for Chromebooks." />
+  <title>Local Voice Studio</title>
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="toastHost" class="toast-host" aria-live="polite"></div>
+
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true">LV</div>
+      <div>
+        <h1>Local Voice Studio</h1>
+        <p>Voice cloning + TTS on this Chromebook</p>
+      </div>
+    </div>
+    <div class="top-actions">
+      <button id="offlinePill" class="status-pill muted" type="button" title="Connection and AI status">
+        <span class="status-dot"></span><span id="offlineLabel">Checking…</span>
+      </button>
+      <button id="installAppBtn" class="ghost small hidden" type="button">Install app</button>
+    </div>
+  </header>
+
+  <main class="shell">
+    <nav class="tabs" aria-label="Main sections">
+      <button class="tab active" data-tab="tts" type="button">Text to Speech</button>
+      <button class="tab" data-tab="clone" type="button">Clone Voice</button>
+      <button class="tab" data-tab="voices" type="button">My Voices</button>
+      <button class="tab" data-tab="settings" type="button">Settings</button>
+    </nav>
+
+    <section id="setupCard" class="setup-card">
+      <div>
+        <span class="eyebrow">FIRST-TIME SETUP</span>
+        <h2>Install the offline AI model</h2>
+        <p>Connect to Wi-Fi once, download the Chatterbox ONNX model, then use the app offline. WebGPU is preferred; WASM is the compatibility fallback.</p>
+      </div>
+      <div class="setup-actions">
+        <button id="installAiBtn" class="primary" type="button">Install / Load Offline AI</button>
+        <div class="progress-wrap hidden" id="modelProgressWrap">
+          <div class="progress-track"><div id="modelProgress" class="progress-bar"></div></div>
+          <span id="modelProgressText">Preparing…</span>
+        </div>
+      </div>
+    </section>
+
+    <section id="tab-tts" class="panel active" data-panel="tts">
+      <div class="workspace-grid">
+        <article class="card editor-card">
+          <div class="card-head">
+            <div>
+              <span class="eyebrow">TEXT TO SPEECH</span>
+              <h2>Speak with a cloned voice</h2>
+            </div>
+            <button id="releaseMemoryBtn" class="ghost small" type="button">Release AI memory</button>
+          </div>
+
+          <label class="field-label" for="voiceSelect">Voice</label>
+          <div class="voice-row">
+            <select id="voiceSelect" class="select"><option value="">No saved voices yet</option></select>
+            <button id="refreshVoicesBtn" class="icon-btn" type="button" title="Refresh voices">↻</button>
+          </div>
+
+          <label class="field-label" for="ttsText">What should it say?</label>
+          <textarea id="ttsText" class="big-text" maxlength="8000" placeholder="Type anything you want your cloned voice to say…"></textarea>
+          <div class="text-meta"><span id="charCount">0 / 8000</span><button id="clearTextBtn" class="link-btn" type="button">Clear</button></div>
+
+          <div class="control-grid">
+            <label class="range-field">
+              <span><b>Speed</b><output id="speedOut">1.00×</output></span>
+              <input id="speedRange" type="range" min="0.75" max="1.25" step="0.01" value="1" />
+            </label>
+            <label class="range-field">
+              <span><b>Expression</b><output id="expressionOut">0.50</output></span>
+              <input id="expressionRange" type="range" min="0" max="1" step="0.05" value="0.5" />
+            </label>
+          </div>
+
+          <div class="action-row">
+            <button id="speakBtn" class="primary large" type="button">▶ Speak now</button>
+            <button id="stopBtn" class="secondary large" type="button" disabled>■ Stop</button>
+            <button id="generateBtn" class="secondary large" type="button">Generate WAV</button>
+          </div>
+          <p class="hint">“Speak now” streams sentence-by-sentence to keep RAM lower. “Generate WAV” renders the whole message for saving.</p>
+        </article>
+
+        <aside class="card output-card">
+          <span class="eyebrow">OUTPUT</span>
+          <div id="outputEmpty" class="empty-state compact">
+            <div class="empty-icon">♫</div>
+            <h3>No generated audio yet</h3>
+            <p>Your most recent WAV will appear here.</p>
+          </div>
+          <div id="outputReady" class="hidden">
+            <audio id="outputAudio" controls preload="metadata"></audio>
+            <div class="output-meta">
+              <div><span>Duration</span><b id="outputDuration">—</b></div>
+              <div><span>Voice</span><b id="outputVoice">—</b></div>
+              <div><span>Generated</span><b id="outputTime">—</b></div>
+            </div>
+            <button id="downloadWavBtn" class="primary wide" type="button">Download WAV</button>
+          </div>
+
+          <div class="divider"></div>
+          <div class="diagnostic-mini">
+            <div><span>AI engine</span><b id="diagEngine">Not loaded</b></div>
+            <div><span>Backend</span><b id="diagBackend">—</b></div>
+            <div><span>Storage</span><b id="diagStorage">Checking…</b></div>
+            <div><span>Session renders</span><b id="diagRenders">0</b></div>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <section id="tab-clone" class="panel" data-panel="clone">
+      <div class="clone-grid">
+        <article class="card">
+          <div class="card-head">
+            <div>
+              <span class="eyebrow">CREATE A VOICE</span>
+              <h2>Clone from reference audio</h2>
+            </div>
+            <span class="badge">1 sec – 10 min</span>
+          </div>
+
+          <label id="dropZone" class="drop-zone" for="referenceFile">
+            <input id="referenceFile" type="file" accept="audio/*,.mp3,.wav,.m4a,.aac,.flac,.ogg,.opus,.webm" hidden />
+            <div class="upload-icon">↑</div>
+            <h3>Drop audio here or choose a file</h3>
+            <p>MP3, WAV, M4A, AAC, FLAC, OGG, OPUS or WebM</p>
+            <button id="chooseAudioBtn" class="secondary" type="button">Choose audio</button>
+          </label>
+
+          <div id="referenceDetails" class="reference-details hidden">
+            <div class="file-line"><b id="referenceName"></b><span id="referenceDuration"></span></div>
+            <audio id="referenceAudio" controls></audio>
+            <div class="analysis-card">
+              <div class="analysis-head"><span>Best cloning sample</span><b id="sampleRange">—</b></div>
+              <div class="wave-mini" id="waveMini" aria-hidden="true"></div>
+              <p id="sampleQuality">Analyzing…</p>
+              <audio id="sampleAudio" controls></audio>
+            </div>
+          </div>
+
+          <label class="field-label" for="cloneName">Voice name</label>
+          <input id="cloneName" class="text-input" maxlength="60" placeholder="Example: My Voice" />
+
+          <label class="check-line">
+            <input id="consentCheck" type="checkbox" />
+            <span>I own this voice or have permission to clone and use it.</span>
+          </label>
+          <label class="check-line">
+            <input id="previewCheck" type="checkbox" checked />
+            <span>Create a short preview after cloning.</span>
+          </label>
+
+          <button id="createCloneBtn" class="primary wide large" type="button" disabled>Create Local Voice</button>
+          <p class="hint">For recordings longer than ~15 seconds, the app selects a clean speech-heavy section locally before cloning. The original recording is not uploaded anywhere.</p>
+        </article>
+
+        <aside class="card tips-card">
+          <span class="eyebrow">FOR THE BEST CLONE</span>
+          <h3>Reference recording tips</h3>
+          <ul class="tips-list">
+            <li>Use one speaker only.</li>
+            <li>Clean speech beats a long recording.</li>
+            <li>Avoid music, TV, reverb and other voices.</li>
+            <li>Normal conversational speech usually works best.</li>
+            <li>5–15 seconds of clean speech is a strong target.</li>
+          </ul>
+          <div class="privacy-box"><b>Local by design</b><p>Audio analysis, cloning and TTS run on this device after the model is installed.</p></div>
+        </aside>
+      </div>
+    </section>
+
+    <section id="tab-voices" class="panel" data-panel="voices">
+      <article class="card">
+        <div class="card-head">
+          <div><span class="eyebrow">VOICE LIBRARY</span><h2>My Voices</h2></div>
+          <div class="inline-actions">
+            <input id="importVoiceFile" type="file" accept=".voiceclone,application/octet-stream,application/gzip" hidden />
+            <button id="importVoiceBtn" class="secondary" type="button">Import clone</button>
+          </div>
+        </div>
+        <div id="voiceLibrary" class="voice-library"></div>
+      </article>
+    </section>
+
+    <section id="tab-settings" class="panel" data-panel="settings">
+      <div class="settings-grid">
+        <article class="card">
+          <span class="eyebrow">CHROMEBOOK MODE</span>
+          <h2>Performance & reliability</h2>
+          <label class="setting-row">
+            <span><b>Preferred backend</b><small>Auto tries WebGPU, then WASM.</small></span>
+            <select id="backendSelect" class="select narrow">
+              <option value="auto">Auto</option>
+              <option value="webgpu">WebGPU</option>
+              <option value="wasm">WASM</option>
+            </select>
+          </label>
+          <label class="setting-row">
+            <span><b>Chunk size</b><small>Smaller chunks use less peak memory.</small></span>
+            <select id="chunkSelect" class="select narrow">
+              <option value="90">90 chars — safest</option>
+              <option value="110" selected>110 chars — Chromebook</option>
+              <option value="120">120 chars — default</option>
+              <option value="150">150 chars — faster</option>
+            </select>
+          </label>
+          <label class="setting-row switch-row">
+            <span><b>Automatic GPU recovery</b><small>Rebuilds the AI session after device-lost / GPUBuffer errors and retries once.</small></span>
+            <input id="autoRecoverCheck" type="checkbox" checked />
+          </label>
+          <label class="setting-row switch-row">
+            <span><b>Prevent memory buildup</b><small>Recycle the AI session periodically while keeping cloned voices.</small></span>
+            <input id="autoRecycleCheck" type="checkbox" checked />
+          </label>
+          <label class="setting-row">
+            <span><b>Recycle after</b><small>Useful on 8 GB Chromebooks.</small></span>
+            <select id="recycleSelect" class="select narrow">
+              <option value="3">3 renders</option>
+              <option value="5" selected>5 renders</option>
+              <option value="8">8 renders</option>
+              <option value="12">12 renders</option>
+            </select>
+          </label>
+          <button id="saveSettingsBtn" class="primary" type="button">Save settings</button>
+        </article>
+
+        <article class="card">
+          <span class="eyebrow">OFFLINE STORAGE</span>
+          <h2>Model & browser storage</h2>
+          <div class="storage-meter"><div id="storageBar"></div></div>
+          <p id="storageText">Checking storage…</p>
+          <div class="stack-actions">
+            <button id="persistStorageBtn" class="secondary wide" type="button">Protect offline files from automatic cleanup</button>
+            <button id="reloadAiBtn" class="secondary wide" type="button">Reload AI engine</button>
+            <button id="clearModelCacheBtn" class="danger wide" type="button">Clear AI/model caches</button>
+          </div>
+          <p class="hint">Clearing model caches means the AI model must be downloaded again before offline use.</p>
+        </article>
+
+        <article class="card full-span">
+          <span class="eyebrow">DIAGNOSTICS</span>
+          <h2>Device check</h2>
+          <div id="diagnostics" class="diagnostics"></div>
+          <div class="inline-actions top-gap">
+            <button id="copyDiagBtn" class="secondary" type="button">Copy diagnostics</button>
+            <button id="runCheckBtn" class="secondary" type="button">Run checks again</button>
+          </div>
+        </article>
+      </div>
+    </section>
+  </main>
+
+  <div id="busyOverlay" class="busy-overlay hidden" role="status" aria-live="assertive">
+    <div class="busy-card">
+      <div class="spinner"></div>
+      <h3 id="busyTitle">Working…</h3>
+      <p id="busyText">Please keep this tab open.</p>
+      <div id="busyProgressWrap" class="progress-wrap hidden">
+        <div class="progress-track"><div id="busyProgress" class="progress-bar"></div></div>
+        <span id="busyProgressText"></span>
+      </div>
+      <button id="cancelBusyBtn" class="ghost hidden" type="button">Cancel</button>
+    </div>
+  </div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

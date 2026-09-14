@@ -1,0 +1,8 @@
+Local Voice Studio project code in this package is provided for the user's use/modification.
+
+Runtime open-source dependencies loaded by the app:
+- VoxShot (MIT): https://github.com/m96-chan/voxshot
+- @huggingface/transformers / Transformers.js: https://github.com/huggingface/transformers.js
+- Chatterbox ONNX model: https://huggingface.co/onnx-community/chatterbox-ONNX
+
+Review upstream model/library licenses before redistribution or commercial use.

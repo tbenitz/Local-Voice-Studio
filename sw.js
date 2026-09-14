@@ -1,6 +1,6 @@
-const APP_CACHE = 'local-voice-studio-v1';
-const VENDOR_CACHE = 'local-voice-studio-vendor-v1';
-const SHELL = ['./','./index.html','./styles.css','./app.js','./tts-worker.js','./manifest.webmanifest','./icons/icon-192.png','./icons/icon-512.png'];
+const APP_CACHE = 'local-voice-studio-v2-fixed';
+const VENDOR_CACHE = 'local-voice-studio-vendor-v2-fixed';
+const SHELL = ['./','./index.html','./styles.css','./app.js','./tts-worker.js','./local-tts.js','./manifest.webmanifest','./icons/icon-192.png','./icons/icon-512.png'];
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(APP_CACHE).then(cache => cache.addAll(SHELL)).then(() => self.skipWaiting()));
 });
